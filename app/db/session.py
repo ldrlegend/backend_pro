@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 import os
 
 # Explicitly load the .env file from the app directory
-load_dotenv(dotenv_path="D:/product_mana/backend_pro/app/.env")
+load_dotenv(dotenv_path="./.env")
 
 # Fetch environment variables
 DB_HOST = os.getenv("DB_HOST")
