@@ -4,14 +4,16 @@ from app.api.v1 import user, product
 from app.db.init_db import init_db
 from fastapi.middleware.cors import CORSMiddleware
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    init_db()
-    yield
-    # Shutdown cleanup (if needed)
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     # Startup
+#     init_db()
+#     yield
+#     # Shutdown cleanup (if needed)
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
+
+# app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

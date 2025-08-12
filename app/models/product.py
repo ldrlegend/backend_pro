@@ -44,13 +44,13 @@ class Product(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     product_code = Column(String(50), unique=True, nullable=False, index=True)
-    status = Column(Enum(ProductStatus), nullable=False, default=ProductStatus.ACTIVE)
-    type_of_sim = Column(Enum(SimType), nullable=False)
-    operator_code = Column(Enum(OperatorCode), nullable=False)
-    vendor_code = Column(Enum(VendorCode), nullable=False)
-    purchase_type = Column(Enum(PurchaseType), nullable=False)
-    sku_type = Column(Enum(SkuType), nullable=False)
-    data_type = Column(Enum(DataType), nullable=False)
+    status = Column(Enum(ProductStatus, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=ProductStatus.ACTIVE)
+    type_of_sim = Column(Enum(SimType, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    operator_code = Column(Enum(OperatorCode, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    vendor_code = Column(Enum(VendorCode, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    purchase_type = Column(Enum(PurchaseType, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    sku_type = Column(Enum(SkuType, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    data_type = Column(Enum(DataType, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
     hotspot = Column(Boolean, default=False)
     
     # Timestamps
