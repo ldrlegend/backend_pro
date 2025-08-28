@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from app.api.v1 import user, product
+from app.api.v1 import user, product, vendor
 from app.db.init_db import init_db
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,3 +23,4 @@ app.add_middleware(
 
 app.include_router(user.router, prefix="/users", tags=["users"])
 app.include_router(product.router, prefix="/products", tags=["products"])
+app.include_router(vendor.router, prefix="/vendors", tags=["vendors"])

@@ -2,7 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.db.session import get_db
-from app.models.product import Product, ProductStatus, SimType, OperatorCode, VendorCode, PurchaseType, SkuType, DataType
+from app.models.product import Product
+from app.utils.enums.status import Status
+from app.utils.enums.type_of_sim import TypeOfSim as SimType
+from app.utils.enums.purchase_type import PurchaseType
+from app.utils.enums.sku_type import SkuType
+from app.utils.enums.data_type import DataType
 from app.schemas.product import ProductCreate, ProductUpdate, ProductOut, ProductList
 
 router = APIRouter()
@@ -25,9 +30,9 @@ def create_product(product: ProductCreate, db: Session = Depends(get_db)):
 def get_products(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
-    status: Optional[ProductStatus] = Query(None, description="Filter by status"),
-    operator_code: Optional[OperatorCode] = Query(None, description="Filter by operator"),
-    vendor_code: Optional[VendorCode] = Query(None, description="Filter by vendor"),
+    status: Optional[Status] = Query(None, description="Filter by status"),
+    # operator_code: Optional[OperatorCode] = Query(None, description="Filter by operator"),
+    # vendor_code: Optional[VendorCode] = Query(None, description="Filter by vendor"),
     purchase_type: Optional[PurchaseType] = Query(None, description="Filter by purchase type"),
     db: Session = Depends(get_db)
 ):
@@ -37,10 +42,10 @@ def get_products(
     # Apply filters
     if status:
         query = query.filter(Product.status == status)
-    if operator_code:
-        query = query.filter(Product.operator_code == operator_code)
-    if vendor_code:
-        query = query.filter(Product.vendor_code == vendor_code)
+    # if operator_code:
+    #     query = query.filter(Product.operator_code == operator_code)
+    # if vendor_code:
+    #     query = query.filter(Product.vendor_code == vendor_code)
     if purchase_type:
         query = query.filter(Product.purchase_type == purchase_type)
     
@@ -92,29 +97,29 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
     if not db_product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    db_product.status = ProductStatus.DELETED
+    db_product.status = Status.DELETED
     db.commit()
     return {"message": "Product deleted successfully"}
 
 @router.get("/enums/status", response_model=List[str])
 def get_status_options():
     """Get all available status options"""
-    return [status.value for status in ProductStatus]
+    return [status.value for status in Status]
 
 @router.get("/enums/sim-types", response_model=List[str])
 def get_sim_type_options():
     """Get all available SIM type options"""
     return [sim_type.value for sim_type in SimType]
 
-@router.get("/enums/operators", response_model=List[str])
-def get_operator_options():
-    """Get all available operator options"""
-    return [operator.value for operator in OperatorCode]
+# @router.get("/enums/operators", response_model=List[str])
+# def get_operator_options():
+#     """Get all available operator options"""
+#     return [operator.value for operator in OperatorCode]
 
-@router.get("/enums/vendors", response_model=List[str])
-def get_vendor_options():
-    """Get all available vendor options"""
-    return [vendor.value for vendor in VendorCode]
+# @router.get("/enums/vendors", response_model=List[str])
+# def get_vendor_options():
+#     """Get all available vendor options"""
+#     return [vendor.value for vendor in VendorCode]
 
 @router.get("/enums/purchase-types", response_model=List[str])
 def get_purchase_type_options():
