@@ -25,6 +25,7 @@ class Country(Base):
     # parent_code= Column(Text, nullable=True)
     seo_url_key = Column(Text, nullable=False)
     is_popular = Column(Enum(IsPopular), nullable=False, default=IsPopular.NO, index=True)
+    # sort_order = Column(Integer, nullable=False)
     type_bidv= Column(Enum(CountryType), nullable=False, default=CountryType.SINGLE_COUNTRY)
     date_created = Column(TIMESTAMP(timezone=True), server_default=func.now())
     last_modified_date = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())

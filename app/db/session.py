@@ -15,6 +15,9 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 # Construct the database URL
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL is not set")
+
 # SQLAlchemy engine setup
 from sqlalchemy import create_engine
 engine = create_engine(DATABASE_URL)

@@ -18,7 +18,10 @@ def create_operator(operator: OperatorCreate, db: Session = Depends(get_db)):
     existing_operator = db.query(Operator).filter(Operator.operator_code == operator.operator_code).first()
     if existing_operator:
         raise HTTPException(status_code=400, detail="Operator code already exists")
-    db_operator = Operator(**operator.model_dump())
+    
+    # Create operator with country_code field
+    operator_data = operator.model_dump()
+    db_operator = Operator(**operator_data)
     db.add(db_operator)
     db.commit()
     db.refresh(db_operator)
@@ -46,6 +49,14 @@ def update_operator(operator_id: int, operator: OperatorUpdate, db: Session = De
     db_operator = db.query(Operator).filter(Operator.id == operator_id).first()
     if not db_operator:
         raise HTTPException(status_code=404, detail="Operator not found")
-    db_operator.operator_code = operator.operator_code
-    db_operator.code = operator.code
-    db_operator.operator_name = operator.operator_name
+    
+    if operator.operator_code is not None:
+        db_operator.operator_code = operator.operator_code
+    if operator.operator_name is not None:
+        db_operator.operator_name = operator.operator_name
+    if operator.country_code is not None:
+        db_operator.country_code = operator.country_code
+    
+    db.commit()
+    db.refresh(db_operator)
+    return db_operator

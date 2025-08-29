@@ -8,9 +8,11 @@ from app.utils.enums.sku_type import SkuType
 from app.utils.enums.data_type import DataType
 from app.utils.enums.import_type import ImportType
 from app.models.product import DataPlanType
+from app.models.product import YesNo
 
 # Base Product Schema
 class ProductBase(BaseModel):
+    id: Optional[int] = None
     product_code: str
     status: ProductStatus
     type_of_sim: SimType
@@ -25,12 +27,12 @@ class ProductBase(BaseModel):
     daily_reset_time: Optional[str] = None
     network_type: str
     APN: Optional[str] = None
-    hotspot: bool = False
+    hotspot: YesNo
     onsite_carrier: Optional[str] = None
-    local_phone_number: bool = False
+    local_phone_number: YesNo
     local_number_country: Optional[str] = None
-    kyc_code: Optional[int] = None
-    top_up_options: bool = False
+    kyc_needed: YesNo
+    top_up_options: YesNo
     activation: Optional[str] = None
     unsupported_apps: Optional[str] = None
     telco_perks: Optional[str] = None
@@ -43,6 +45,7 @@ class ProductCreate(ProductBase):
 
 # Update Product Schema
 class ProductUpdate(BaseModel):
+    id: Optional[int] = None
     product_code: Optional[str] = None
     status: Optional[ProductStatus] = None
     type_of_sim: Optional[SimType] = None
@@ -52,10 +55,10 @@ class ProductUpdate(BaseModel):
     sku_type: Optional[SkuType] = None
     data_type: Optional[DataType] = None
     onsite_carrier: Optional[str] = None
-    local_phone_number: Optional[bool] = None
+    local_phone_number: Optional[YesNo] = None
     local_number_country: Optional[str] = None
-    kyc_code: Optional[int] = None
-    top_up_options: Optional[bool] = None
+    kyc_needed: Optional[YesNo] = None
+    top_up_options: Optional[YesNo] = None
     activation: Optional[str] = None
     unsupported_apps: Optional[str] = None
     telco_perks: Optional[str] = None
@@ -67,13 +70,12 @@ class ProductUpdate(BaseModel):
     daily_reset_time: Optional[str] = None
     network_type: Optional[str] = None
     APN: Optional[str] = None
-    hotspot: Optional[bool] = None
+    hotspot: Optional[YesNo] = None
 
 # Product Response Schema
 class ProductOut(ProductBase):
-    id: int
-    created_at: datetime
-    updated_at: datetime
+    date_created: datetime
+    last_modified_date: datetime
 
     model_config = ConfigDict(from_attributes=True)
 

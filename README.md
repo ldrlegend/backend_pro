@@ -71,3 +71,17 @@ backend_pro/
 ├── run.py              # Application entry point
 └── README.md           # This file
 ```
+
+### 6. Docker
+
+- Docker build
+docker build -t product-mana-be:latest .
+
+- Docker run with db info
+docker run -d --name product-mana-be -p 8003:8003 `
+  -e DB_HOST=host.docker.internal `
+  -e DB_PORT=5432 `
+  -e DB_NAME=mydb `
+  -e DB_USER=postgres `
+  -e DB_PASSWORD=password `
+  product-mana-be:latest

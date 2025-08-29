@@ -6,7 +6,7 @@ from app.schemas.country import CountryOut
 class OperatorBase(BaseModel):
     operator_code: str
     operator_name: Optional[str] = None
-    country: Optional[CountryOut] = None
+    country_code: str
 
 class OperatorCreate(OperatorBase):
     pass
@@ -14,11 +14,12 @@ class OperatorCreate(OperatorBase):
 class OperatorUpdate(BaseModel):
     operator_code: Optional[str] = None
     operator_name: Optional[str] = None
-    country: Optional[CountryOut] = None
+    country_code: Optional[str] = None
 
 class OperatorOut(OperatorBase):
     id: int
     date_created: datetime
     last_modified_date: datetime
+    country: Optional[CountryOut] = None
 
     model_config = ConfigDict(from_attributes=True)

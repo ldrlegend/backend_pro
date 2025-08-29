@@ -1,0 +1,13 @@
+# version: '3.8'
+
+services:
+  product-mana-be:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: product-mana-be
+    ports:
+      - "8003:8003"
+    restart: unless-stopped
+    volumes:
+      - .:/app
