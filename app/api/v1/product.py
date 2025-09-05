@@ -1,94 +1,326 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from typing import List, Optional
+from sqlalchemy.orm import Session, joinedload
+from typing import List, Optional, Any
 from app.db.session import get_db
 from app.models.product import Product
+from app.models.attribute import Attribute, AttributeGroup
+from app.models.attribute_option import AttributeOption
+from app.models.product_attribute_value_index import ProductAttributeValueIndex
 from app.utils.enums.status import Status
-from app.utils.enums.type_of_sim import TypeOfSim as SimType
-from app.utils.enums.purchase_type import PurchaseType
-from app.utils.enums.sku_type import SkuType
-from app.utils.enums.data_type import DataType
-from app.schemas.product import ProductCreate, ProductUpdate, ProductOut, ProductList
+from app.schemas.product import (
+    ProductOut, ProductList, AvailableAttribute, AvailableAttributesResponse,
+    create_dynamic_product_create_schema, create_dynamic_product_update_schema,
+    create_dynamic_product_out_schema, format_product_for_dynamic_schema,
+    extract_attributes_from_request
+)
 
 router = APIRouter()
 
-@router.post("/", response_model=ProductOut)
-def create_product(product: ProductCreate, db: Session = Depends(get_db)):
-    """Create a new product"""
+def get_product_attributes(db: Session) -> list[AvailableAttribute]:
+    """Get all available attributes for the 'product' group"""
+    attributes = db.query(Attribute).filter(
+        Attribute.attribute_group == AttributeGroup.product
+    ).all()
+    
+    available_attributes = []
+    for attr in attributes:
+        options = [
+            {
+                "id": opt.id,
+                "attribute_option_en": opt.attribute_option_en,
+                "attribute_option_vn": opt.attribute_option_vn
+            }
+            for opt in attr.attribute_options
+        ]
+        
+        available_attributes.append(AvailableAttribute(
+            attribute_code=attr.attribute_code,
+            attribute_name_en=attr.attribute_name_en,
+            attribute_name_vn=attr.attribute_name_vn,
+            type_attribute=attr.type_attribute.value,
+            attribute_group=attr.attribute_group.value,
+            options=options
+        ))
+    
+    return available_attributes
+
+@router.get("/available-attributes", response_model=AvailableAttributesResponse)
+def get_available_attributes(db: Session = Depends(get_db)):
+    """Get all available attributes for the 'product' group"""
+    attributes = get_product_attributes(db)
+    return AvailableAttributesResponse(attributes=attributes)
+
+
+@router.post("/")
+def create_product(request_data: dict, db: Session = Depends(get_db)):
+    """Create a new product with dynamic attributes"""
+    
+    # Get available attributes to validate against
+    attributes = get_product_attributes(db)
+    
+    # Create dynamic schema and validate request
+    ProductCreateSchema = create_dynamic_product_create_schema(attributes)
+    
+    try:
+        validated_data = ProductCreateSchema(**request_data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Validation error: {str(e)}")
+    
     # Check if product_code already exists
-    existing_product = db.query(Product).filter(Product.product_code == product.product_code).first()
+    existing_product = db.query(Product).filter(Product.product_code == validated_data.product_code).first()
     if existing_product:
         raise HTTPException(status_code=400, detail="Product code already exists")
     
-    db_product = Product(**product.model_dump())
+    # Create base product (exclude attribute from model_dump)
+    base_product_data = {
+        'product_code': validated_data.product_code,
+        'status': validated_data.status,
+        'vendor_code': validated_data.vendor_code,
+        'operator_code': validated_data.operator_code,
+        'supported_countries': validated_data.supported_countries,
+        'note': validated_data.note,
+    }
+    
+    db_product = Product(**base_product_data)
     db.add(db_product)
     db.commit()
     db.refresh(db_product)
-    return db_product
+    
+    # Extract and handle dynamic attributes
+    attribute_values = extract_attributes_from_request(request_data, attributes)
+    
+    for attribute_code, option_value in attribute_values.items():
+        if option_value:  # Only process non-empty values
+            # Find the attribute
+            attribute = db.query(Attribute).filter(
+                Attribute.attribute_code == attribute_code,
+                Attribute.attribute_group == AttributeGroup.product
+            ).first()
+            if not attribute:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Attribute '{attribute_code}' not found in product group"
+                )
+            
+            # Find the attribute option
+            attribute_option = None
+            if option_value.isdigit():
+                # Try to find by ID first
+                attribute_option = db.query(AttributeOption).filter(
+                    AttributeOption.id == int(option_value),
+                    AttributeOption.attribute_code == attribute_code
+                ).first()
+            
+            if not attribute_option:
+                # Try to find by text (English or Vietnamese)
+                attribute_option = db.query(AttributeOption).filter(
+                    AttributeOption.attribute_code == attribute_code,
+                    (AttributeOption.attribute_option_en == option_value) |
+                    (AttributeOption.attribute_option_vn == option_value)
+                ).first()
+            
+            if not attribute_option:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Attribute option '{option_value}' not found for attribute '{attribute_code}'"
+                )
+            
+            # Create the mapping
+            pavi = ProductAttributeValueIndex(
+                product_id=db_product.id,
+                attribute_id=attribute.id,
+                attribute_option_id=attribute_option.id
+            )
+            db.add(pavi)
+    
+    db.commit()
+    db.refresh(db_product)
+    
+    # Format response using dynamic schema
+    ProductOutSchema = create_dynamic_product_out_schema(attributes)
+    response_data = format_product_for_dynamic_schema(db_product, attributes)
+    
+    return ProductOutSchema(**response_data)
 
-@router.get("/", response_model=List[ProductOut])
+@router.get("/")
 def get_products(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
     status: Optional[Status] = Query(None, description="Filter by status"),
-    # operator_code: Optional[OperatorCode] = Query(None, description="Filter by operator"),
-    # vendor_code: Optional[VendorCode] = Query(None, description="Filter by vendor"),
-    purchase_type: Optional[PurchaseType] = Query(None, description="Filter by purchase type"),
+    dynamic_schema: bool = Query(True, description="Use dynamic schema with attribute fields"),
     db: Session = Depends(get_db)
 ):
-    """Get all products with optional filtering"""
+    """Get all products with their dynamic attributes"""
     query = db.query(Product)
     
     # Apply filters
     if status:
         query = query.filter(Product.status == status)
-    # if operator_code:
-    #     query = query.filter(Product.operator_code == operator_code)
-    # if vendor_code:
-    #     query = query.filter(Product.vendor_code == vendor_code)
-    if purchase_type:
-        query = query.filter(Product.purchase_type == purchase_type)
+    
+    if dynamic_schema:
+        # Load relationships for dynamic schema
+        query = query.options(
+            joinedload(Product.product_attribute_value_index)
+            .joinedload(ProductAttributeValueIndex.attribute),
+            joinedload(Product.product_attribute_value_index)
+            .joinedload(ProductAttributeValueIndex.attribute_option)
+        )
     
     products = query.offset(skip).limit(limit).all()
-    return products
+    
+    if dynamic_schema:
+        # Return with dynamic schema
+        attributes = get_product_attributes(db)
+        ProductOutSchema = create_dynamic_product_out_schema(attributes)
+        return [ProductOutSchema(**format_product_for_dynamic_schema(product, attributes)) for product in products]
+    else:
+        # Return with static schema
+        return [ProductOut.model_validate(product) for product in products]
 
-@router.get("/{product_id}", response_model=ProductOut)
-def get_product(product_id: int, db: Session = Depends(get_db)):
-    """Get a specific product by ID"""
-    product = db.query(Product).filter(Product.id == product_id).first()
+
+@router.get("/{product_id}")
+def get_product(
+    product_id: int, 
+    dynamic_schema: bool = Query(True, description="Use dynamic schema with attribute fields"),
+    db: Session = Depends(get_db)
+):
+    """Get a specific product by ID with its dynamic attributes"""
+    product = db.query(Product).options(
+        joinedload(Product.product_attribute_value_index)
+        .joinedload(ProductAttributeValueIndex.attribute),
+        joinedload(Product.product_attribute_value_index)
+        .joinedload(ProductAttributeValueIndex.attribute_option)
+    ).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    return product
+    
+    if dynamic_schema:
+        # Return with dynamic schema showing attribute.* fields
+        attributes = get_product_attributes(db)
+        ProductOutSchema = create_dynamic_product_out_schema(attributes)
+        response_data = format_product_for_dynamic_schema(product, attributes)
+        
+        return ProductOutSchema(**response_data)
+    else:
+        # Return with static schema
+        return ProductOut.model_validate(product)
 
-@router.get("/code/{product_code}", response_model=ProductOut)
-def get_product_by_code(product_code: str, db: Session = Depends(get_db)):
-    """Get a specific product by product code"""
+@router.get("/code/{product_code}")
+def get_product_by_code(
+    product_code: str,
+    dynamic_schema: bool = Query(True, description="Use dynamic schema with attribute fields"),
+    db: Session = Depends(get_db)
+):
+    """Get a specific product by product code with its dynamic attributes"""
     product = db.query(Product).filter(Product.product_code == product_code).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    return product
+    
+    if dynamic_schema:
+        # Return with dynamic schema showing attribute.* fields
+        attributes = get_product_attributes(db)
+        ProductOutSchema = create_dynamic_product_out_schema(attributes)
+        response_data = format_product_for_dynamic_schema(product, attributes)
+        return ProductOutSchema(**response_data)
+    else:
+        # Return with static schema
+        return ProductOut.model_validate(product)
 
-@router.put("/{product_id}", response_model=ProductOut)
-def update_product(product_id: int, product_update: ProductUpdate, db: Session = Depends(get_db)):
-    """Update a product"""
+@router.put("/{product_id}")
+def update_product(product_id: int, request_data: dict, db: Session = Depends(get_db)):
+    """Update a product and its dynamic attributes"""
     db_product = db.query(Product).filter(Product.id == product_id).first()
     if not db_product:
         raise HTTPException(status_code=404, detail="Product not found")
     
+    # Get available attributes to validate against
+    attributes = get_product_attributes(db)
+    
+    # Create dynamic schema and validate request
+    ProductUpdateSchema = create_dynamic_product_update_schema(attributes)
+    
+    try:
+        validated_data = ProductUpdateSchema(**request_data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Validation error: {str(e)}")
+    
     # Check if new product_code already exists (if being updated)
-    if product_update.product_code and product_update.product_code != db_product.product_code:
-        existing_product = db.query(Product).filter(Product.product_code == product_update.product_code).first()
+    if validated_data.product_code and validated_data.product_code != db_product.product_code:
+        existing_product = db.query(Product).filter(Product.product_code == validated_data.product_code).first()
         if existing_product:
             raise HTTPException(status_code=400, detail="Product code already exists")
     
-    # Update only provided fields
-    update_data = product_update.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(db_product, field, value)
+    # Update base product fields
+    base_fields = ['product_code', 'status', 'vendor_code', 'operator_code', 'supported_countries', 'note']
+    for field in base_fields:
+        value = getattr(validated_data, field, None)
+        if value is not None:
+            setattr(db_product, field, value)
+    
+    # Extract and handle attribute updates
+    attribute_values = extract_attributes_from_request(request_data, attributes)
+    
+    if attribute_values:
+        # Remove existing attributes that are being updated
+        for attribute_code in attribute_values.keys():
+            attribute = db.query(Attribute).filter(Attribute.attribute_code == attribute_code).first()
+            if attribute:
+                db.query(ProductAttributeValueIndex).filter(
+                    ProductAttributeValueIndex.product_id == product_id,
+                    ProductAttributeValueIndex.attribute_id == attribute.id
+                ).delete()
+        
+        # Add new attribute values
+        for attribute_code, option_value in attribute_values.items():
+            if option_value:  # Only process non-empty values
+                # Find the attribute
+                attribute = db.query(Attribute).filter(
+                    Attribute.attribute_code == attribute_code,
+                    Attribute.attribute_group == AttributeGroup.product
+                ).first()
+                if not attribute:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"Attribute '{attribute_code}' not found in product group"
+                    )
+                
+                # Find the attribute option
+                attribute_option = None
+                if option_value.isdigit():
+                    attribute_option = db.query(AttributeOption).filter(
+                        AttributeOption.id == int(option_value),
+                        AttributeOption.attribute_code == attribute_code
+                    ).first()
+                
+                if not attribute_option:
+                    attribute_option = db.query(AttributeOption).filter(
+                        AttributeOption.attribute_code == attribute_code,
+                        (AttributeOption.attribute_option_en == option_value) |
+                        (AttributeOption.attribute_option_vn == option_value)
+                    ).first()
+                
+                if not attribute_option:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"Attribute option '{option_value}' not found for attribute '{attribute_code}'"
+                    )
+                
+                # Create the mapping
+                pavi = ProductAttributeValueIndex(
+                    product_id=db_product.id,
+                    attribute_id=attribute.id,
+                    attribute_option_id=attribute_option.id
+                )
+                db.add(pavi)
     
     db.commit()
     db.refresh(db_product)
-    return db_product
+    
+    # Format response using dynamic schema
+    ProductOutSchema = create_dynamic_product_out_schema(attributes)
+    response_data = format_product_for_dynamic_schema(db_product, attributes)
+    
+    return ProductOutSchema(**response_data)
 
 @router.delete("/{product_id}")
 def delete_product(product_id: int, db: Session = Depends(get_db)):
@@ -101,37 +333,44 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Product deleted successfully"}
 
-@router.get("/enums/status", response_model=List[str])
-def get_status_options():
-    """Get all available status options"""
-    return [status.value for status in Status]
 
-@router.get("/enums/sim-types", response_model=List[str])
-def get_sim_type_options():
-    """Get all available SIM type options"""
-    return [sim_type.value for sim_type in SimType]
 
-# @router.get("/enums/operators", response_model=List[str])
-# def get_operator_options():
-#     """Get all available operator options"""
-#     return [operator.value for operator in OperatorCode]
+# @router.get("/test-schema")
+# def test_dynamic_schema(db: Session = Depends(get_db)):
+#     """Test the dynamic schema creation"""
+#     attributes = get_product_attributes(db)
+#     ProductOutSchema = create_dynamic_product_out_schema(attributes)
+    
+#     # Create a sample response
+#     sample_data = {
+#         'id': 999,
+#         'product_code': 'TEST',
+#         'status': Status.ACTIVE,
+#         'vendor_code': 'TEST',
+#         'operator_code': 'TEST',
+#         'supported_countries': 'US',
+#         'note': None,
+#         'date_created': '2024-01-01T00:00:00Z',
+#         'last_modified_date': '2024-01-01T00:00:00Z',
+#         'attribute_type_of_sim': 'TestValue'
+#     }
+    
+#     return {
+#         "schema_fields": list(ProductOutSchema.model_fields.keys()),
+#         "sample_instance": ProductOutSchema(**sample_data),
+#         "attributes_count": len(attributes)
+#     }
 
-# @router.get("/enums/vendors", response_model=List[str])
-# def get_vendor_options():
-#     """Get all available vendor options"""
-#     return [vendor.value for vendor in VendorCode]
+# @router.get("/schema/create")
+# def get_create_product_schema(db: Session = Depends(get_db)):
+#     """Get the dynamic schema for creating products"""
+#     attributes = get_product_attributes(db)
+#     schema_class = create_dynamic_product_create_schema(attributes)
+#     return schema_class.model_json_schema()
 
-@router.get("/enums/purchase-types", response_model=List[str])
-def get_purchase_type_options():
-    """Get all available purchase type options"""
-    return [purchase_type.value for purchase_type in PurchaseType]
-
-@router.get("/enums/sku-types", response_model=List[str])
-def get_sku_type_options():
-    """Get all available SKU type options"""
-    return [sku_type.value for sku_type in SkuType]
-
-@router.get("/enums/data-types", response_model=List[str])
-def get_data_type_options():
-    """Get all available data type options"""
-    return [data_type.value for data_type in DataType]
+# @router.get("/schema/update")
+# def get_update_product_schema(db: Session = Depends(get_db)):
+#     """Get the dynamic schema for updating products"""
+#     attributes = get_product_attributes(db)
+#     schema_class = create_dynamic_product_update_schema(attributes)
+#     return schema_class.model_json_schema()

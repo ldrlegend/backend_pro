@@ -1,79 +1,20 @@
-from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from pydantic import BaseModel, ConfigDict, Field, create_model
+from typing import Optional, Dict, Any, Type
 from datetime import datetime
 from app.utils.enums.status import Status as ProductStatus
-from app.utils.enums.type_of_sim import TypeOfSim as SimType
-from app.utils.enums.purchase_type import PurchaseType
-from app.utils.enums.sku_type import SkuType
-from app.utils.enums.data_type import DataType
-from app.utils.enums.import_type import ImportType
-from app.models.product import DataPlanType
-from app.models.product import YesNo
 
-# Base Product Schema
+# Base Product Schema (only core fields)
 class ProductBase(BaseModel):
-    id: Optional[int] = None
     product_code: str
-    status: ProductStatus
-    type_of_sim: SimType
-    operator_code: str
+    status: ProductStatus = ProductStatus.ACTIVE
     vendor_code: str
-    purchase_type: PurchaseType
-    sku_type: SkuType
-    data_type: DataType
-    base_sim_sku_code: Optional[str] = None
-    import_type: ImportType
+    operator_code: str
     supported_countries: str
-    daily_reset_time: Optional[str] = None
-    network_type: str
-    APN: Optional[str] = None
-    hotspot: YesNo
-    onsite_carrier: Optional[str] = None
-    local_phone_number: YesNo
-    local_number_country: Optional[str] = None
-    kyc_needed: YesNo
-    top_up_options: YesNo
-    activation: Optional[str] = None
-    unsupported_apps: Optional[str] = None
-    telco_perks: Optional[str] = None
-    data_plan_type: Optional[DataPlanType] = None
     note: Optional[str] = None
 
-# Create Product Schema
-class ProductCreate(ProductBase):
-    pass
-
-# Update Product Schema
-class ProductUpdate(BaseModel):
-    id: Optional[int] = None
-    product_code: Optional[str] = None
-    status: Optional[ProductStatus] = None
-    type_of_sim: Optional[SimType] = None
-    operator_code: Optional[str] = None
-    vendor_code: Optional[str] = None
-    purchase_type: Optional[PurchaseType] = None
-    sku_type: Optional[SkuType] = None
-    data_type: Optional[DataType] = None
-    onsite_carrier: Optional[str] = None
-    local_phone_number: Optional[YesNo] = None
-    local_number_country: Optional[str] = None
-    kyc_needed: Optional[YesNo] = None
-    top_up_options: Optional[YesNo] = None
-    activation: Optional[str] = None
-    unsupported_apps: Optional[str] = None
-    telco_perks: Optional[str] = None
-    data_plan_type: Optional[DataPlanType] = None
-    note: Optional[str] = None
-    base_sim_sku_code: Optional[str] = None
-    import_type: Optional[ImportType] = None
-    supported_countries: Optional[str] = None
-    daily_reset_time: Optional[str] = None
-    network_type: Optional[str] = None
-    APN: Optional[str] = None
-    hotspot: Optional[YesNo] = None
-
-# Product Response Schema
+# Static Product Response Schema (without dynamic attributes)
 class ProductOut(ProductBase):
+    id: int
     date_created: datetime
     last_modified_date: datetime
 
@@ -87,3 +28,109 @@ class ProductList(BaseModel):
     size: int
 
     model_config = ConfigDict(from_attributes=True)
+
+# Schema for available attributes (to show what attributes can be used)
+class AvailableAttribute(BaseModel):
+    attribute_code: str
+    attribute_name_en: str
+    attribute_name_vn: str
+    type_attribute: str
+    attribute_group: str
+    options: list[Dict[str, Any]] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+class AvailableAttributesResponse(BaseModel):
+    attributes: list[AvailableAttribute]
+
+# Dynamic schema creation functions
+def create_dynamic_product_create_schema(attributes: list) -> Type[BaseModel]:
+    """Create a dynamic ProductCreate schema with nested attribute object"""
+    
+    # Start with base fields
+    fields = {
+        'product_code': (str, ...),
+        'status': (ProductStatus, ProductStatus.ACTIVE),
+        'vendor_code': (str, ...),
+        'operator_code': (str, ...),
+        'supported_countries': (str, ...),
+        'note': (Optional[str], None),
+        'attribute': (Optional[Dict[str, str]], Field(default_factory=dict, description="Dynamic attributes"))
+    }
+    
+    return create_model('ProductCreate', **fields, __base__=BaseModel)
+
+def create_dynamic_product_update_schema(attributes: list) -> Type[BaseModel]:
+    """Create a dynamic ProductUpdate schema with nested attribute object"""
+    
+    # Start with base fields (all optional for updates)
+    fields = {
+        'product_code': (Optional[str], None),
+        'status': (Optional[ProductStatus], None),
+        'vendor_code': (Optional[str], None),
+        'operator_code': (Optional[str], None),
+        'supported_countries': (Optional[str], None),
+        'note': (Optional[str], None),
+        'attribute': (Optional[Dict[str, str]], Field(default_factory=dict, description="Dynamic attributes"))
+    }
+    
+    return create_model('ProductUpdate', **fields, __base__=BaseModel)
+
+def create_dynamic_product_out_schema(attributes: list) -> Type[BaseModel]:
+    """Create a dynamic ProductOut schema with nested attribute object"""
+    
+    # Start with base fields
+    fields = {
+        'id': (int, ...),
+        'product_code': (str, ...),
+        'status': (ProductStatus, ...),
+        'vendor_code': (str, ...),
+        'operator_code': (str, ...),
+        'supported_countries': (str, ...),
+        'note': (Optional[str], None),
+        'date_created': (datetime, ...),
+        'last_modified_date': (datetime, ...),
+        'attribute': (Optional[Dict[str, str]], Field(default_factory=dict, description="Dynamic attributes"))
+    }
+    
+    DynamicProductOut = create_model('DynamicProductOut', **fields, __base__=BaseModel)
+    DynamicProductOut.model_config = ConfigDict(from_attributes=True)
+    
+    return DynamicProductOut
+
+# Helper function to convert product data to match dynamic schema
+def format_product_for_dynamic_schema(product, attributes: list) -> dict:
+    """Format product data to match the dynamic schema with nested attribute object"""
+    
+    # Start with base product data
+    result = {
+        'id': product.id,
+        'product_code': product.product_code,
+        'status': product.status,
+        'vendor_code': product.vendor_code,
+        'operator_code': product.operator_code,
+        'supported_countries': product.supported_countries,
+        'note': product.note,
+        'date_created': product.date_created,
+        'last_modified_date': product.last_modified_date,
+        'attribute': {}
+    }
+    
+    # Add attributes to nested object
+    for pavi in product.product_attribute_value_index:
+        result['attribute'][pavi.attribute.attribute_code] = pavi.attribute_value
+    
+    return result
+
+def extract_attributes_from_request(request_data: dict, attributes: list) -> dict:
+    """Extract attribute values from request data with nested attribute object"""
+    
+    extracted_attributes = {}
+    
+    # Check if there's an 'attribute' object in the request
+    if 'attribute' in request_data and isinstance(request_data['attribute'], dict):
+        for attribute_code, value in request_data['attribute'].items():
+            if value is not None:
+                extracted_attributes[attribute_code] = value
+    
+    return extracted_attributes
