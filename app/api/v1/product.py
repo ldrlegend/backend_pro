@@ -165,22 +165,27 @@ def get_products(
     if status:
         query = query.filter(Product.status == status)
     
-    if dynamic_schema:
-        # Temporarily get all products with attributes until database is updated
-        query = query.join(ProductAttributeValueIndex).join(Attribute).distinct()
-        # Load relationships for dynamic schema
-        query = query.options(
-            joinedload(Product.product_attribute_value_index)
-            .joinedload(ProductAttributeValueIndex.attribute),
-            joinedload(Product.product_attribute_value_index)
-            .joinedload(ProductAttributeValueIndex.attribute_option)
-        )
+    # if dynamic_schema:
+    #     # Temporarily get all products with attributes until database is updated
+    #     query = query.join(ProductAttributeValueIndex).join(Attribute).join(AttributeGroupLink).join(AttributeGroup).filter(
+    #         AttributeGroup.group_name == AttributeGroupName.product
+    #     ).distinct()
+    #     # Load relationships for dynamic schema
+    #     query = query.options(
+    #         joinedload(Product.product_attribute_value_index)
+    #         .joinedload(ProductAttributeValueIndex.attribute)
+    #         .joinedload(Attribute.attribute_group_links)
+    #         .joinedload(AttributeGroupLink.attribute_group),
+    #         joinedload(Product.product_attribute_value_index)
+    #         .joinedload(ProductAttributeValueIndex.attribute_option)
+    # )
     
     products = query.offset(skip).limit(limit).all()
     
     if dynamic_schema:
         # Return with dynamic schema
         attributes = get_product_attributes(db)
+        print(attributes)
         ProductOutSchema = create_dynamic_product_out_schema(attributes)
         return [ProductOutSchema(**format_product_for_dynamic_schema(product, attributes)) for product in products]
     else:

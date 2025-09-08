@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from app.db.session import get_db
 from app.models.attribute import Attribute
+from app.models.attribute_group_link import AttributeGroupLink
 from app.schemas.attribute import AttributeCreate, AttributeUpdate, AttributeOut
 
 router = APIRouter()
@@ -10,7 +11,7 @@ router = APIRouter()
 @router.get("/", response_model=List[AttributeOut])
 def get_attributes(db: Session = Depends(get_db)):
     """Get all attributes"""
-    attributes = db.query(Attribute).options(joinedload(Attribute.attribute_group)).all()
+    attributes = db.query(Attribute).options(joinedload(Attribute.attribute_group_links).joinedload(AttributeGroupLink.attribute_group)).all()
     result = []
     for attr in attributes:
         attr_dict = {
@@ -19,9 +20,9 @@ def get_attributes(db: Session = Depends(get_db)):
             "attribute_name_vn": attr.attribute_name_vn,
             "attribute_name_en": attr.attribute_name_en,
             "type_attribute": attr.type_attribute.value if attr.type_attribute else None,
-            "attribute_group_id": attr.attribute_group_id,
+            # "attribute_group_id": attr.attribute_group_id,
             "status": attr.status,
-            "attribute_group_name": attr.attribute_group.group_name.value if attr.attribute_group else None,
+            "attribute_group_name": attr.attribute_group_links[0].attribute_group.group_name.value if attr.attribute_group_links else None,
             "date_created": attr.date_created,
             "last_modified_date": attr.last_modified_date
         }
@@ -48,7 +49,7 @@ def create_attribute(attribute: AttributeCreate, db: Session = Depends(get_db)):
         "attribute_name_vn": db_attribute.attribute_name_vn,
         "attribute_name_en": db_attribute.attribute_name_en,
         "type_attribute": db_attribute.type_attribute.value if db_attribute.type_attribute else None,
-        "attribute_group_id": db_attribute.attribute_group_id,
+        # "attribute_group_id": db_attribute.attribute_group_id,
         "status": db_attribute.status,
         "attribute_group_name": db_attribute.attribute_group.group_name.value if db_attribute.attribute_group else None,
         "date_created": db_attribute.date_created,
@@ -69,7 +70,7 @@ def get_attribute(attribute_id: int, db: Session = Depends(get_db)):
         "attribute_name_vn": db_attribute.attribute_name_vn,
         "attribute_name_en": db_attribute.attribute_name_en,
         "type_attribute": db_attribute.type_attribute.value if db_attribute.type_attribute else None,
-        "attribute_group_id": db_attribute.attribute_group_id,
+        # "attribute_group_id": db_attribute.attribute_group_id,
         "status": db_attribute.status,
         "attribute_group_name": db_attribute.attribute_group.group_name.value if db_attribute.attribute_group else None,
         "date_created": db_attribute.date_created,
@@ -90,7 +91,7 @@ def get_attribute_by_code(attribute_code: str, db: Session = Depends(get_db)):
         "attribute_name_vn": db_attribute.attribute_name_vn,
         "attribute_name_en": db_attribute.attribute_name_en,
         "type_attribute": db_attribute.type_attribute.value if db_attribute.type_attribute else None,
-        "attribute_group_id": db_attribute.attribute_group_id,
+        # "attribute_group_id": db_attribute.attribute_group_id,
         "status": db_attribute.status,
         "attribute_group_name": db_attribute.attribute_group.group_name.value if db_attribute.attribute_group else None,
         "date_created": db_attribute.date_created,
@@ -127,7 +128,7 @@ def update_attribute(attribute_id: int, attribute: AttributeUpdate, db: Session 
         "attribute_name_vn": db_attribute.attribute_name_vn,
         "attribute_name_en": db_attribute.attribute_name_en,
         "type_attribute": db_attribute.type_attribute.value if db_attribute.type_attribute else None,
-        "attribute_group_id": db_attribute.attribute_group_id,
+        # "attribute_group_id": db_attribute.attribute_group_id,
         "status": db_attribute.status,
         "attribute_group_name": db_attribute.attribute_group.group_name.value if db_attribute.attribute_group else None,
         "date_created": db_attribute.date_created,

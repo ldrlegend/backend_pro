@@ -117,8 +117,8 @@ def format_product_for_dynamic_schema(product, attributes: list) -> dict:
     }
     
     # Add attributes to nested object
-    for pavi in product.product_attribute_value_index:
-        result['attribute'][pavi.attribute.attribute_code] = pavi.attribute_value
+    for pavi in attributes:
+        result['attribute'][pavi.attribute_code] = pavi.attribute_code
     
     return result
 

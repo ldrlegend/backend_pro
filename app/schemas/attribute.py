@@ -8,7 +8,7 @@ class AttributeBase(BaseModel):
     attribute_name_vn: Optional[str] = None
     attribute_name_en: Optional[str] = None
     type_attribute: Optional[str] = None
-    attribute_group_id: Optional[int] = None
+    # attribute_group_id: Optional[int] = None
     status: Optional[AttributeStatus] = AttributeStatus.active
 class AttributeCreate(AttributeBase):
     pass
@@ -18,7 +18,7 @@ class AttributeUpdate(BaseModel):
     attribute_name_vn: Optional[str] = None
     attribute_name_en: Optional[str] = None
     type_attribute: Optional[str] = None
-    attribute_group_id: Optional[int] = None
+    # attribute_group_id: Optional[int] = None
     status: Optional[AttributeStatus] = AttributeStatus.active
 
 class AttributeOut(AttributeBase):
