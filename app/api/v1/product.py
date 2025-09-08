@@ -3,9 +3,11 @@ from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional, Any
 from app.db.session import get_db
 from app.models.product import Product
-from app.models.attribute import Attribute, AttributeGroup
+from app.models.attribute import Attribute
+from app.models.attribute_group import AttributeGroup, AttributeGroupName
 from app.models.attribute_option import AttributeOption
 from app.models.product_attribute_value_index import ProductAttributeValueIndex
+from app.models.attribute_group_link import AttributeGroupLink
 from app.utils.enums.status import Status
 from app.schemas.product import (
     ProductOut, ProductList, AvailableAttribute, AvailableAttributesResponse,
@@ -18,8 +20,12 @@ router = APIRouter()
 
 def get_product_attributes(db: Session) -> list[AvailableAttribute]:
     """Get all available attributes for the 'product' group"""
-    attributes = db.query(Attribute).filter(
-        Attribute.attribute_group == AttributeGroup.product
+    # Temporarily get all attributes until database is updated with attribute_group_id column
+    attributes = db.query(Attribute).join(AttributeGroupLink).join(AttributeGroup).filter(
+        AttributeGroup.group_name == AttributeGroupName.product
+    ).options(
+        joinedload(Attribute.attribute_group_links).joinedload(AttributeGroupLink.attribute_group),
+        joinedload(Attribute.attribute_options)
     ).all()
     
     available_attributes = []
@@ -33,12 +39,15 @@ def get_product_attributes(db: Session) -> list[AvailableAttribute]:
             for opt in attr.attribute_options
         ]
         
+        # Temporarily set group name as "Product" until database is updated with attribute_group_id column
+        group_name = "Product"
+        
         available_attributes.append(AvailableAttribute(
             attribute_code=attr.attribute_code,
             attribute_name_en=attr.attribute_name_en,
             attribute_name_vn=attr.attribute_name_vn,
             type_attribute=attr.type_attribute.value,
-            attribute_group=attr.attribute_group.value,
+            attribute_group=group_name,
             options=options
         ))
     
@@ -93,8 +102,7 @@ def create_product(request_data: dict, db: Session = Depends(get_db)):
         if option_value:  # Only process non-empty values
             # Find the attribute
             attribute = db.query(Attribute).filter(
-                Attribute.attribute_code == attribute_code,
-                Attribute.attribute_group == AttributeGroup.product
+                Attribute.attribute_code == attribute_code
             ).first()
             if not attribute:
                 raise HTTPException(
@@ -158,6 +166,8 @@ def get_products(
         query = query.filter(Product.status == status)
     
     if dynamic_schema:
+        # Temporarily get all products with attributes until database is updated
+        query = query.join(ProductAttributeValueIndex).join(Attribute).distinct()
         # Load relationships for dynamic schema
         query = query.options(
             joinedload(Product.product_attribute_value_index)
@@ -275,8 +285,7 @@ def update_product(product_id: int, request_data: dict, db: Session = Depends(ge
             if option_value:  # Only process non-empty values
                 # Find the attribute
                 attribute = db.query(Attribute).filter(
-                    Attribute.attribute_code == attribute_code,
-                    Attribute.attribute_group == AttributeGroup.product
+                    Attribute.attribute_code == attribute_code
                 ).first()
                 if not attribute:
                     raise HTTPException(
@@ -332,45 +341,3 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
     db_product.status = Status.DELETED
     db.commit()
     return {"message": "Product deleted successfully"}
-
-
-
-# @router.get("/test-schema")
-# def test_dynamic_schema(db: Session = Depends(get_db)):
-#     """Test the dynamic schema creation"""
-#     attributes = get_product_attributes(db)
-#     ProductOutSchema = create_dynamic_product_out_schema(attributes)
-    
-#     # Create a sample response
-#     sample_data = {
-#         'id': 999,
-#         'product_code': 'TEST',
-#         'status': Status.ACTIVE,
-#         'vendor_code': 'TEST',
-#         'operator_code': 'TEST',
-#         'supported_countries': 'US',
-#         'note': None,
-#         'date_created': '2024-01-01T00:00:00Z',
-#         'last_modified_date': '2024-01-01T00:00:00Z',
-#         'attribute_type_of_sim': 'TestValue'
-#     }
-    
-#     return {
-#         "schema_fields": list(ProductOutSchema.model_fields.keys()),
-#         "sample_instance": ProductOutSchema(**sample_data),
-#         "attributes_count": len(attributes)
-#     }
-
-# @router.get("/schema/create")
-# def get_create_product_schema(db: Session = Depends(get_db)):
-#     """Get the dynamic schema for creating products"""
-#     attributes = get_product_attributes(db)
-#     schema_class = create_dynamic_product_create_schema(attributes)
-#     return schema_class.model_json_schema()
-
-# @router.get("/schema/update")
-# def get_update_product_schema(db: Session = Depends(get_db)):
-#     """Get the dynamic schema for updating products"""
-#     attributes = get_product_attributes(db)
-#     schema_class = create_dynamic_product_update_schema(attributes)
-#     return schema_class.model_json_schema()

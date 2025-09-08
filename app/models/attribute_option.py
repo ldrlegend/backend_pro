@@ -20,9 +20,9 @@ class AttributeOption(Base):
 
     # Relationships
     attribute = relationship("Attribute", foreign_keys=[attribute_code], back_populates="attribute_options")
-    # attribute_by_code = relationship("Attribute", foreign_keys=[attribute_code], back_populates="attribute_options")
     product_attribute_value_index = relationship("ProductAttributeValueIndex", back_populates="attribute_option")
-
+    # attribute_by_code = relationship("Attribute", foreign_keys=[attribute_code], back_populates="attribute_options")
+    # item_attribute_value_index = relationship("ItemAttributeValueIndex", back_populates="attribute_option")
     @property
     def attribute_option_name(self):
         return self.attribute_option_en if self.attribute_option_en else self.attribute_option_vn
